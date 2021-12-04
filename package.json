@@ -3,6 +3,16 @@
 	"displayName": "Notepad",
 	"description": "A simple Notepad extension for VS Code",
 	"version": "0.0.1",
+	"publisher": "kelvinkellner",
+	"enabledApiProposals": [
+		"treeViewDragAndDrop"
+	],
+	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/kelvinkellner/notepad"
+	},
 	"engines": {
 		"vscode": "^1.62.0"
 	},
@@ -10,16 +20,47 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:notepad.helloWorld"
+		"onCommand:notepad.newNote",
+		"onView:notepadNotes"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "notepad",
+					"title": "Notepad",
+					"icon": "./resources/sticky.svg"
+				}
+			]
+		},
+		"views": {
+			"notepad": [
+				{
+					"id": "notepadNotes",
+					"name": "Notepad"
+				}
+			]
+		},
 		"commands": [
 			{
-				"command": "notepad.helloWorld",
-				"title": "Hello World"
+				"command": "notepad.newNote",
+				"title": "New Note",
+				"icon": {
+					"dark": "./resources/add-dark.svg",
+					"light": "./resources/add-light.svg"
+				}
 			}
-		]
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "notepad.newNote",
+					"when": "view == notepadNotes",
+					"group": "navigation"
+				}
+			]
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
