@@ -21,6 +21,8 @@
 	],
 	"activationEvents": [
 		"onCommand:notepad.newNote",
+		"onCommand:notepad.deleteNote",
+		"onCommand:notepad.renameNote",
 		"onView:notepadNotes"
 	],
 	"main": "./out/extension.js",
@@ -50,6 +52,22 @@
 					"dark": "./resources/add-dark.svg",
 					"light": "./resources/add-light.svg"
 				}
+			},
+			{
+				"command": "notepad.deleteNote",
+				"title": "Delete Note",
+				"icon": {
+					"dark": "./resources/delete-dark.svg",
+					"light": "./resources/delete-light.svg"
+				}
+			},
+			{
+				"command": "notepad.renameNote",
+				"title": "Rename Note",
+				"icon": {
+					"dark": "./resources/edit-dark.svg",
+					"light": "./resources/edit-light.svg"
+				}
 			}
 		],
 		"menus": {
@@ -58,6 +76,18 @@
 					"command": "notepad.newNote",
 					"when": "view == notepadNotes",
 					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "notepad.renameNote",
+					"when": "view == notepadNotes && viewItem == note",
+					"group": "inline"
+				},
+				{
+					"command": "notepad.deleteNote",
+					"when": "view == notepadNotes && viewItem == note",
+					"group": "inline"
 				}
 			]
 		}
