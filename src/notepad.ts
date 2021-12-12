@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { LocalStorageService } from './storage';
 
+const NOTEPAD_KEY = 'notepad-storage';
+
 export class Notepad {
     private notes: NotesProvider;
 
@@ -38,10 +40,12 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
         this._onDidChangeTreeData.fire();
     }
 
-	data: Note[];
+	data: Note[] = [];
+    storage: LocalStorageService|undefined;
 
-	constructor() {
-		this.data = [];
+	constructor(storage?: LocalStorageService) {
+        this.storage = storage;
+        this.loadFromStorage();
 	}
 
 	getTreeItem(element: Note): vscode.TreeItem|Thenable<vscode.TreeItem> {
@@ -58,6 +62,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     newItem(key: string, message?: string|undefined, children?:Note[]|undefined): Note {
         const note = new Note(key, message, children);
         this.data.push(note);
+        this.saveToStorage();
         this.refresh();
         return note;
     }
@@ -65,6 +70,45 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     deleteItem(note: Note): void {
         this.data.splice(this.data.indexOf(note), 1);
         this.refresh();
+    }
+
+    saveToStorage(): void {
+        this.storage?.setValue(NOTEPAD_KEY, this.notesToGeneric(this.data));
+    }
+
+    loadFromStorage(): void {
+        const data: any|undefined = this.storage?.getValue<Note[]>(NOTEPAD_KEY);
+        if (data) {
+            this.data = this.notesFromGeneric(data)||[];
+        } else {
+            this.data = [];
+        }
+    }
+
+    private notesToGeneric(arr: Note[]): any[]|undefined {
+        if (arr.length === 0) {
+            return undefined;
+        }
+        const notes: any[] = [];
+        arr.forEach(note => {
+            notes.push({
+                label: note.label,
+                message: note.message,
+                children: note.children ? this.notesToGeneric(note.children) : undefined
+            });
+        });
+        return notes;
+    }
+
+    private notesFromGeneric(notes: any[]): Note[]|undefined {
+        if (notes.length === 0) {
+            return undefined;
+        }
+        const arr: Note[] = [];
+        notes.forEach(note => {
+            arr.push(new Note(note['label'], note['message'], note['children'] ? this.notesFromGeneric(note['children']) : undefined));
+        });
+        return arr;
     }
 }
 
