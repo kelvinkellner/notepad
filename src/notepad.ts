@@ -15,6 +15,14 @@ export class Notepad {
             }
         });
 
+        vscode.commands.registerCommand('notepad.renameNote', async (note: Note) => {
+            const key = await vscode.window.showInputBox({ prompt: 'Enter a new name for this Note:' });
+            if (key) {
+                note.renameNote(key);
+                this.notes.refresh();
+            }
+        });
+
         vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
             this.notes.deleteItem(note);
         });
@@ -29,7 +37,6 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     }
 
 	data: Note[];
-    id: number = 0;
 
 	constructor() {
 		this.data = [new Note('test','test message')];
@@ -64,8 +71,6 @@ class Note extends vscode.TreeItem {
 	children: Note[]|undefined;
     message: string|undefined;
     parent: Note|undefined;
-    private idNote: number;
-    static idNext: number = 0;
 
 	constructor(label: string, message?: string, children?: Note[]) {
 		super(
@@ -81,10 +86,9 @@ class Note extends vscode.TreeItem {
         this.label = label;
         this.children = children;
         this.message = message;
-        this.idNote = Note.idNext++;
     }
 
-    getId(): number {
-        return this.idNote;
+    renameNote(name: string): void {
+        this.label = name;
     }
 }
