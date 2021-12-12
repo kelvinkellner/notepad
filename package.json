@@ -82,12 +82,12 @@
 				{
 					"command": "notepad.renameNote",
 					"when": "view == notepadNotes && viewItem == note",
-					"group": "inline"
+					"group": "inline@0"
 				},
 				{
 					"command": "notepad.deleteNote",
 					"when": "view == notepadNotes && viewItem == note",
-					"group": "inline"
+					"group": "inline@1"
 				}
 			]
 		}

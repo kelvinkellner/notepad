@@ -1,31 +1,33 @@
 import * as vscode from 'vscode';
+import { LocalStorageService } from './storage';
 
 export class Notepad {
     private notes: NotesProvider;
 
 	constructor(context: vscode.ExtensionContext) {
-        this.notes = new NotesProvider();
-		const view = vscode.window.createTreeView('notepadNotes', { treeDataProvider: this.notes });
-		context.subscriptions.push(view);
+        let storage = new LocalStorageService(context.workspaceState);
+        this.notes = new NotesProvider(storage);
 
-        vscode.commands.registerCommand('notepad.newNote', async () => {
+		context.subscriptions.push(vscode.window.createTreeView('notepadNotes', { treeDataProvider: this.notes }));
+
+        context.subscriptions.push(vscode.commands.registerCommand('notepad.newNote', async () => {
             const key = await vscode.window.showInputBox({ prompt: 'Enter a name for this Note:' });
             if (key) {
                 this.notes.newItem(key);
             }
-        });
+        }));
 
-        vscode.commands.registerCommand('notepad.renameNote', async (note: Note) => {
+        context.subscriptions.push(vscode.commands.registerCommand('notepad.renameNote', async (note: Note) => {
             const key = await vscode.window.showInputBox({ prompt: 'Enter a new name for this Note:' });
             if (key) {
                 note.renameNote(key);
                 this.notes.refresh();
             }
-        });
+        }));
 
-        vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
+        context.subscriptions.push(vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
             this.notes.deleteItem(note);
-        });
+        }));
 	}
 }
 
@@ -39,7 +41,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
 	data: Note[];
 
 	constructor() {
-		this.data = [new Note('test','test message')];
+		this.data = [];
 	}
 
 	getTreeItem(element: Note): vscode.TreeItem|Thenable<vscode.TreeItem> {
@@ -53,8 +55,8 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
 		return element.children;
 	}
 
-    newItem(key: string): Note {
-        const note = new Note(key, 'New Note');
+    newItem(key: string, message?: string|undefined, children?:Note[]|undefined): Note {
+        const note = new Note(key, message, children);
         this.data.push(note);
         this.refresh();
         return note;
@@ -71,6 +73,9 @@ class Note extends vscode.TreeItem {
 	children: Note[]|undefined;
     message: string|undefined;
     parent: Note|undefined;
+    path: string|undefined;
+    static nextId: number = 0;
+    noteId: number;
 
 	constructor(label: string, message?: string, children?: Note[]) {
 		super(
@@ -86,6 +91,8 @@ class Note extends vscode.TreeItem {
         this.label = label;
         this.children = children;
         this.message = message;
+
+        this.noteId = Note.nextId++;
     }
 
     renameNote(name: string): void {
