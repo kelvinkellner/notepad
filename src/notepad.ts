@@ -16,7 +16,7 @@ export class Notepad {
         });
 
         vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
-            console.log(note);
+            this.notes.deleteItem(note);
         });
 	}
 }
@@ -29,6 +29,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     }
 
 	data: Note[];
+    id: number = 0;
 
 	constructor() {
 		this.data = [new Note('test','test message')];
@@ -51,6 +52,11 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
         this.refresh();
         return note;
     }
+
+    deleteItem(note: Note): void {
+        this.data.splice(this.data.indexOf(note), 1);
+        this.refresh();
+    }
 }
 
 class Note extends vscode.TreeItem {
@@ -58,6 +64,8 @@ class Note extends vscode.TreeItem {
 	children: Note[]|undefined;
     message: string|undefined;
     parent: Note|undefined;
+    private idNote: number;
+    static idNext: number = 0;
 
 	constructor(label: string, message?: string, children?: Note[]) {
 		super(
@@ -73,5 +81,10 @@ class Note extends vscode.TreeItem {
         this.label = label;
         this.children = children;
         this.message = message;
+        this.idNote = Note.idNext++;
+    }
+
+    getId(): number {
+        return this.idNote;
     }
 }
