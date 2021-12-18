@@ -30,6 +30,10 @@ export class Notepad {
         context.subscriptions.push(vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
             this.notes.deleteItem(note);
         }));
+
+        context.subscriptions.push(vscode.commands.registerCommand('notepad.openNote', async (note: Note) => {
+            note.openNote();
+        }));
 	}
 }
 
@@ -68,6 +72,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     }
 
     deleteItem(note: Note): void {
+        note.deleteNote();
         this.data.splice(this.data.indexOf(note), 1);
         this.refresh();
     }
@@ -117,11 +122,11 @@ class Note extends vscode.TreeItem {
 	children: Note[]|undefined;
     message: string|undefined;
     parent: Note|undefined;
-    path: string|undefined;
-    static nextId: number = 0;
-    noteId: number;
+    filePath: vscode.Uri|undefined;
+    // static nextId: number = 0;
+    // noteId: number;
 
-	constructor(label: string, message?: string, children?: Note[]) {
+	constructor(label: string, message?: string, children?: Note[], id?: number) {
 		super(
 			label,
 			children === undefined
@@ -136,10 +141,58 @@ class Note extends vscode.TreeItem {
         this.children = children;
         this.message = message;
 
-        this.noteId = Note.nextId++;
+        // if (id && Note.nextId < id) {
+        //     Note.nextId = id;
+        // }
+        // this.noteId = Note.nextId++;
+        this.createNote();
     }
 
     renameNote(name: string): void {
         this.label = name;
+        if(this.filePath) {
+            const newFilePath = this.getPath(name);
+            vscode.workspace.fs.rename(this.filePath, newFilePath, {
+                overwrite: false
+            }).then();
+            this.filePath = newFilePath;
+        } else {
+            this.openNote();
+        }
+    }
+
+    openNote(): void {
+        vscode.window.showInformationMessage(`Opening note ${this.label}`);
+        if (this.filePath) {
+            vscode.workspace.openTextDocument(this.filePath).then(doc => {
+                vscode.window.showTextDocument(doc);
+            });
+        } else {
+            this.createNote();
+        }
+    }
+
+    createNote(): void {
+        vscode.window.showInformationMessage(`Creating note ${this.label}`);
+        const wsedit = new vscode.WorkspaceEdit();
+        const filePath = this.getPath();
+        vscode.window.showInformationMessage(filePath.toString());
+        wsedit.createFile(filePath, { ignoreIfExists: true });
+        vscode.workspace.applyEdit(wsedit).then(() => {
+            this.filePath = filePath;
+            this.openNote();
+        });
+    }
+
+    deleteNote(): void {
+        vscode.window.showInformationMessage(`Delete note ${this.label}`);
+        if (this.filePath) {
+            vscode.workspace.fs.delete(this.filePath);
+        }
+    }
+    
+    getPath(label?: string): vscode.Uri {
+        const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; // gets the path of the first workspace folder
+        return vscode.Uri.file(wsPath + '/notepad/' + (label ? label : this.label ? this.label : '') + '.note');
     }
 }
