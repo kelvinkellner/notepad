@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import { LocalStorageService } from './storage';
 
 const NOTEPAD_KEY = 'notepad-storage';
@@ -50,6 +51,15 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
 	constructor(storage?: LocalStorageService) {
         this.storage = storage;
         this.loadFromStorage();
+
+        vscode.workspace.onDidSaveTextDocument(doc => {
+            this.data.forEach(note => {
+                if (doc.fileName === note.uri?.fsPath) {
+                    note.setText(doc.getText());
+                    this.saveToStorage();
+                }
+            });
+        });
 	}
 
 	getTreeItem(element: Note): vscode.TreeItem|Thenable<vscode.TreeItem> {
@@ -63,8 +73,8 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
 		return element.children;
 	}
 
-    newItem(key: string, message?: string|undefined, children?:Note[]|undefined): Note {
-        const note = new Note(key, message, children);
+    newItem(key: string, text?: string|undefined, children?:Note[]|undefined): Note {
+        const note = new Note(key, text, children);
         this.data.push(note);
         this.saveToStorage();
         this.refresh();
@@ -98,7 +108,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
         arr.forEach(note => {
             notes.push({
                 label: note.label,
-                message: note.message,
+                text: note.text,
                 children: note.children ? this.notesToGeneric(note.children) : undefined
             });
         });
@@ -111,7 +121,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
         }
         const arr: Note[] = [];
         notes.forEach(note => {
-            arr.push(new Note(note['label'], note['message'], note['children'] ? this.notesFromGeneric(note['children']) : undefined));
+            arr.push(new Note(note['label'], note['text'], note['children'] ? this.notesFromGeneric(note['children']) : undefined));
         });
         return arr;
     }
@@ -120,13 +130,13 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
 class Note extends vscode.TreeItem {
     label: string;
 	children: Note[]|undefined;
-    message: string|undefined;
+    text: string|undefined;
     parent: Note|undefined;
-    filePath: vscode.Uri|undefined;
+    uri: vscode.Uri|undefined;
     // static nextId: number = 0;
     // noteId: number;
 
-	constructor(label: string, message?: string, children?: Note[], id?: number) {
+	constructor(label: string, text?: string, children?: Note[], id?: number) {
 		super(
 			label,
 			children === undefined
@@ -139,23 +149,24 @@ class Note extends vscode.TreeItem {
         
         this.label = label;
         this.children = children;
-        this.message = message;
+        this.text = text;
 
         // if (id && Note.nextId < id) {
         //     Note.nextId = id;
         // }
         // this.noteId = Note.nextId++;
         this.createNote();
+        this.openNote();
     }
 
     renameNote(name: string): void {
         this.label = name;
-        if(this.filePath) {
-            const newFilePath = this.getPath(name);
-            vscode.workspace.fs.rename(this.filePath, newFilePath, {
+        if(this.uri) {
+            const newUri = this.getPath(name);
+            vscode.workspace.fs.rename(this.uri, newUri, {
                 overwrite: false
             }).then();
-            this.filePath = newFilePath;
+            this.uri = newUri;
         } else {
             this.openNote();
         }
@@ -163,36 +174,55 @@ class Note extends vscode.TreeItem {
 
     openNote(): void {
         vscode.window.showInformationMessage(`Opening note ${this.label}`);
-        if (this.filePath) {
-            vscode.workspace.openTextDocument(this.filePath).then(doc => {
+        if (this.uri) {
+            vscode.workspace.openTextDocument(this.uri).then(doc => {
                 vscode.window.showTextDocument(doc);
             });
         } else {
             this.createNote();
+            this.openNote();
         }
     }
 
     createNote(): void {
         vscode.window.showInformationMessage(`Creating note ${this.label}`);
         const wsedit = new vscode.WorkspaceEdit();
-        const filePath = this.getPath();
-        vscode.window.showInformationMessage(filePath.toString());
-        wsedit.createFile(filePath, { ignoreIfExists: true });
-        vscode.workspace.applyEdit(wsedit).then(() => {
-            this.filePath = filePath;
-            this.openNote();
-        });
+        const uri = this.getPath();
+        if (fs.existsSync(uri.fsPath)) {
+            vscode.workspace.openTextDocument(uri).then(doc => {
+                if (!this.text || doc.getText() !== this.text) {
+                    this.setText(doc.getText());
+                }
+            });
+        } else {
+            wsedit.createFile(uri);
+            vscode.workspace.applyEdit(wsedit).then(() => {
+                fs.writeFile(uri.fsPath, this.text ? this.text : "", (error: any) => {
+                    if (error) {
+                        vscode.window.showErrorMessage("Could not write to file: " + this.uri + ": " + error.message);
+                    } else {
+                        vscode.workspace.openTextDocument(uri);
+                    }
+                });
+            });
+        }
+        this.uri = uri;
     }
 
     deleteNote(): void {
         vscode.window.showInformationMessage(`Delete note ${this.label}`);
-        if (this.filePath) {
-            vscode.workspace.fs.delete(this.filePath);
+        if (this.uri) {
+            vscode.workspace.fs.delete(this.uri);
         }
     }
     
     getPath(label?: string): vscode.Uri {
         const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; // gets the path of the first workspace folder
         return vscode.Uri.file(wsPath + '/notepad/' + (label ? label : this.label ? this.label : '') + '.note');
+    }
+
+    setText(text: string): void {
+        this.text = text;
+        vscode.window.showInformationMessage("Text set to: " + text);
     }
 }
