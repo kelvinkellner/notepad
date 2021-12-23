@@ -220,7 +220,7 @@ class Note extends vscode.TreeItem {
                         vscode.window.showInformationMessage(this.uri.fsPath + ' -- ' + fs.existsSync(this.uri.fsPath));
                         vscode.workspace.openTextDocument(this.uri).then(doc => {
                             vscode.window.showTextDocument(doc);
-                        });6
+                        });
                     }
                 });
             });
