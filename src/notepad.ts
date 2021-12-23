@@ -6,10 +6,14 @@ const NOTEPAD_KEY = 'notepad-storage';
 
 export class Notepad {
     private notes: NotesProvider;
+    private storageUri: vscode.Uri;
+    private storage: LocalStorageService;
 
 	constructor(context: vscode.ExtensionContext) {
-        let storage = new LocalStorageService(context.workspaceState);
-        this.notes = new NotesProvider(storage);
+
+        this.storageUri = context.storageUri ? context.storageUri : context.globalStorageUri;
+        this.storage = new LocalStorageService(context.workspaceState);
+        this.notes = new NotesProvider(this.storageUri, this.storage);
 
 		context.subscriptions.push(vscode.window.createTreeView('notepadNotes', { treeDataProvider: this.notes }));
 
@@ -20,16 +24,15 @@ export class Notepad {
             }
         }));
 
+        context.subscriptions.push(vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
+            this.notes.deleteItem(note);
+        }));
+
         context.subscriptions.push(vscode.commands.registerCommand('notepad.renameNote', async (note: Note) => {
             const key = await vscode.window.showInputBox({ prompt: 'Enter a new name for this Note:' });
             if (key) {
-                note.renameNote(key);
-                this.notes.refresh();
+                this.notes.renameItem(note, key);
             }
-        }));
-
-        context.subscriptions.push(vscode.commands.registerCommand('notepad.deleteNote', async (note: Note) => {
-            this.notes.deleteItem(note);
         }));
 
         context.subscriptions.push(vscode.commands.registerCommand('notepad.openNote', async (note: Note) => {
@@ -46,15 +49,17 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     }
 
 	data: Note[] = [];
+    storageUri: vscode.Uri;
     storage: LocalStorageService|undefined;
 
-	constructor(storage?: LocalStorageService) {
+	constructor(storageUri: vscode.Uri, storage?: LocalStorageService) {
+        this.storageUri = storageUri;
         this.storage = storage;
         this.loadFromStorage();
 
         vscode.workspace.onDidSaveTextDocument(doc => {
             this.data.forEach(note => {
-                if (doc.fileName === note.uri?.fsPath) {
+                if (doc.fileName === note.uri.fsPath) {
                     note.setText(doc.getText());
                     this.saveToStorage();
                 }
@@ -74,7 +79,7 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
 	}
 
     newItem(key: string, text?: string|undefined, children?:Note[]|undefined): Note {
-        const note = new Note(key, text, children);
+        const note = new Note(key, this.getPath(key), text, children);
         this.data.push(note);
         this.saveToStorage();
         this.refresh();
@@ -84,6 +89,13 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
     deleteItem(note: Note): void {
         note.deleteNote();
         this.data.splice(this.data.indexOf(note), 1);
+        this.saveToStorage();
+        this.refresh();
+    }
+
+    renameItem(note: Note, label: string): void {
+        note.renameNote(label, this.getPath(label));
+        this.saveToStorage();
         this.refresh();
     }
 
@@ -121,9 +133,15 @@ class NotesProvider implements vscode.TreeDataProvider<Note> {
         }
         const arr: Note[] = [];
         notes.forEach(note => {
-            arr.push(new Note(note['label'], note['text'], note['children'] ? this.notesFromGeneric(note['children']) : undefined));
+            arr.push(new Note(note['label'], this.getPath(note['label']), note['text'], note['children'] ? this.notesFromGeneric(note['children']) : undefined));
         });
         return arr;
+    }
+    
+    getPath(label: string): vscode.Uri {
+        const path = this.storageUri.fsPath;
+        //vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; // gets the path of the first workspace folder
+        return vscode.Uri.file(path + '/notepad/' + label + '.note');
     }
 }
 
@@ -132,11 +150,11 @@ class Note extends vscode.TreeItem {
 	children: Note[]|undefined;
     text: string|undefined;
     parent: Note|undefined;
-    uri: vscode.Uri|undefined;
+    uri: vscode.Uri;
     // static nextId: number = 0;
     // noteId: number;
 
-	constructor(label: string, text?: string, children?: Note[], id?: number) {
+	constructor(label: string, uri: vscode.Uri, text?: string, children?: Note[], id?: number) {
 		super(
 			label,
 			children === undefined
@@ -150,19 +168,18 @@ class Note extends vscode.TreeItem {
         this.label = label;
         this.children = children;
         this.text = text;
+        this.uri = uri;
 
         // if (id && Note.nextId < id) {
         //     Note.nextId = id;
         // }
         // this.noteId = Note.nextId++;
         this.createNote();
-        this.openNote();
     }
 
-    renameNote(name: string): void {
+    renameNote(name: string, newUri: vscode.Uri): void {
         this.label = name;
         if(this.uri) {
-            const newUri = this.getPath(name);
             vscode.workspace.fs.rename(this.uri, newUri, {
                 overwrite: false
             }).then();
@@ -174,39 +191,40 @@ class Note extends vscode.TreeItem {
 
     openNote(): void {
         vscode.window.showInformationMessage(`Opening note ${this.label}`);
-        if (this.uri) {
+        if (fs.existsSync(this.uri.fsPath)) {
             vscode.workspace.openTextDocument(this.uri).then(doc => {
                 vscode.window.showTextDocument(doc);
             });
         } else {
             this.createNote();
-            this.openNote();
+            // this.openNote();
         }
     }
 
     createNote(): void {
         vscode.window.showInformationMessage(`Creating note ${this.label}`);
         const wsedit = new vscode.WorkspaceEdit();
-        const uri = this.getPath();
-        if (fs.existsSync(uri.fsPath)) {
-            vscode.workspace.openTextDocument(uri).then(doc => {
+        if (fs.existsSync(this.uri.fsPath)) {
+            vscode.workspace.openTextDocument(this.uri).then(doc => {
                 if (!this.text || doc.getText() !== this.text) {
                     this.setText(doc.getText());
                 }
             });
         } else {
-            wsedit.createFile(uri);
+            wsedit.createFile(this.uri);
             vscode.workspace.applyEdit(wsedit).then(() => {
-                fs.writeFile(uri.fsPath, this.text ? this.text : "", (error: any) => {
+                fs.writeFile(this.uri.fsPath, this.text ? this.text : "", (error: any) => {
                     if (error) {
                         vscode.window.showErrorMessage("Could not write to file: " + this.uri + ": " + error.message);
                     } else {
-                        vscode.workspace.openTextDocument(uri);
+                        vscode.window.showInformationMessage(this.uri.fsPath + ' -- ' + fs.existsSync(this.uri.fsPath));
+                        vscode.workspace.openTextDocument(this.uri).then(doc => {
+                            vscode.window.showTextDocument(doc);
+                        });6
                     }
                 });
             });
         }
-        this.uri = uri;
     }
 
     deleteNote(): void {
@@ -215,14 +233,8 @@ class Note extends vscode.TreeItem {
             vscode.workspace.fs.delete(this.uri);
         }
     }
-    
-    getPath(label?: string): vscode.Uri {
-        const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath; // gets the path of the first workspace folder
-        return vscode.Uri.file(wsPath + '/notepad/' + (label ? label : this.label ? this.label : '') + '.note');
-    }
 
     setText(text: string): void {
         this.text = text;
-        vscode.window.showInformationMessage("Text set to: " + text);
     }
 }
