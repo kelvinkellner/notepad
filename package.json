@@ -23,7 +23,7 @@
 		"onCommand:notepad.newNote",
 		"onCommand:notepad.deleteNote",
 		"onCommand:notepad.renameNote",
-		"onView:notepadNotes"
+		"onView:notepad"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -37,6 +37,12 @@
 			]
 		},
 		"views": {
+			"explorer": [
+				{
+					"id": "notepad",
+					"name": "Notepad"
+				}
+			],
 			"notepad": [
 				{
 					"id": "notepadNotes",
